@@ -19,12 +19,27 @@
 #define VDD 2
 #define MAX_LINE_LENGTH 256
 
+int8_t i2c_read(
+    uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, uint16_t length);
+int8_t i2c_write(
+    uint8_t dev_addr, uint8_t reg_addr, const uint8_t *data, size_t* length);
+int readchip(char *NVMorEEPROM);
+void erasechip(char *NVMorEEPROM);
+int writechip(char* NVMorEEPROM, char* csv_path);
+uint8_t* read_csv(const char* filename, size_t* array_size);
+uint8_t soft_reset();
+
+
+
+
 uint8_t slave_address = 0x01; //greenpakの初期値は0x01
 
 uint8_t data_array[16][16] = {};
 static const char *dev_name = "/dev/i2c-3";
 char *comp_str = {"NVM", "EEPROM"};
 size_t i, j;
+
+
 
 /*! I2Cスレーブデバイスからデータを読み込む.
  * @param[in] dev_addr デバイスアドレス.
@@ -170,7 +185,7 @@ void erasechip(char *NVMorEEPROM)
     usleep(40000); //消去時間がmax 20msらしいが念のため20ms待つことにする
   }
   
-  slave_address = 0x00 // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから
+  slave_address = 0x00; // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから
   
 }
 
@@ -274,11 +289,11 @@ uint8_t soft_reset(){
   uint8_t control_code = slave_address << 3;
   control_code |= NVM_CONFIG;
   if(i2c_read(control_code, 0xC8, &tmp,1)){
-    printf("i2c communication failed. \n")
+    printf("i2c communication failed. \n");
     return 1;
   }
   if(i2c_write(control_code, 0xC8, tmp | 0x01, &length)){
-    printf("Failed to write to [1601]bit \n")
+    printf("Failed to write to [1601]bit \n");
     return 1;
   }
   usleep(500000);
