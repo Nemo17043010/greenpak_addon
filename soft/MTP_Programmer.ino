@@ -298,7 +298,7 @@ int readChip(String NVMorEEPROM)
 ////////////////////////////////////////////////////////////////////////////////
 int eraseChip(String NVMorEEPROM)
 {
-  int control_code = slave_address << 3;
+  int control_code = slave_address << 3;//3bit左シフトさせつつA10,A9,A8を0にして"ERSR register"のBlock Adressに設定している
   int addressForAckPolling = control_code;
 
   for (uint8_t i = 0; i < 16; i++)
@@ -308,12 +308,12 @@ int eraseChip(String NVMorEEPROM)
     Serial.print(F(" "));
 
     Wire.beginTransmission(control_code);
-    Wire.write(0xE3);
+    Wire.write(0xE3);//"ERSR register"のWord adressに設定
 
     if (NVMorEEPROM == "NVM")
     {
       Serial.print(F("NVM "));
-      Wire.write(0x80 | i);
+      Wire.write(0x80 | i);// 対象ページを指定して削除開始
     }
     else if (NVMorEEPROM == "EEPROM")
     {
@@ -376,8 +376,8 @@ int writeChip(String NVMorEEPROM)
   else if (NVMorEEPROM == "EEPROM")
   {
     // Serial.println(F("Writing EEPROM"));
-    control_code = slave_address << 3; // slave adressがcontorol_code[4bit] + adress上位3bitのため[3bit]
-    control_code |= EEPROM_CONFIG;     // adress上位3bitがそれぞれNVM、eeprom、registerに紐づいている
+    control_code = slave_address << 3; // slave adressがcontorol_code[4bit] + block adress[3bit]
+    control_code |= EEPROM_CONFIG;     // blockaddress 3bitがそれぞれNVM(0x02)、eeprom(0x03)、NVM領域の設定用register(0x01)に紐づいている
     EEPROM_selected = true;
     addressForAckPolling = slave_address << 3;
   }

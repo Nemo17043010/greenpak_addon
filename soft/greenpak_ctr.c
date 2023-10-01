@@ -14,12 +14,14 @@
 #define NVM_CONFIG 0x02
 #define EEPROM_CONFIG 0x03
 #define VDD 2
+#define MAX_LINE_LENGTH 256
 
-uint8_t slave_address = 0x01;
+uint8_t slave_address = 0x01; //greenpakの初期値は0x01
 
 uint8_t data_array[16][16] = {};
 static const char *dev_name = "/dev/i2c-3";
-uint8_t i, j;
+char *comp_str = {"NVM", "EEPROM"};
+size_t i, j;
 
 /*! I2Cスレーブデバイスからデータを読み込む.
  * @param[in] dev_addr デバイスアドレス.
@@ -64,18 +66,19 @@ int8_t i2c_read(
  * @param[in] length 書き込むデータの長さ.
  */
 int8_t i2c_write(
-    uint8_t dev_addr, uint8_t reg_addr, const uint8_t *data, uint16_t length)
+    uint8_t dev_addr, uint8_t reg_addr, const uint8_t *data, size_t* length)
 {
   int ret;
   /* I2Cデバイスをオープンする. */
   int32_t fd = open(dev_name, O_RDWR);
+  
   if (fd == -1)
   {
-    fprintf(stderr, "i2c_write: failed to open: %s\n", strerror(errno));
+    fprintf(stderr, "i2c_write: failed to open: %s \n", strerror(errno));
     return -1;
   }
 
-  /* I2C-Write用のバッファを準備する. */
+  /* I2C-Write用のバッファを準備する. (lengthに+1しているのはレジスタアドレスも送信する必要があるため)*/
   uint8_t *buffer = (uint8_t *)malloc(length + 1);
   if (buffer == NULL)
   {
@@ -86,7 +89,7 @@ int8_t i2c_write(
   buffer[0] = reg_addr;             /* 1バイト目にレジスタアドレスをセット. */
   memcpy(&buffer[1], data, length); /* 2バイト目以降にデータをセット. */
 
-  /* I2C-Writeメッセージを作成する. */
+  /* I2C-Writeメッセージを作成する.(lengthに+1しているのはレジスタアドレスも送信する必要があるため) */
   struct i2c_msg message = {dev_addr, 0, length + 1, buffer};
   struct i2c_rdwr_ioctl_data ioctl_data = {&message, 1};
 
@@ -104,7 +107,10 @@ int8_t i2c_write(
   return 0;
 }
 
-int readChip(char *NVMorEEPROM)
+/*! NVM領域かEEPROM領域いずれかの内容をdumpする
+ * @param[in] NVMorEEPROM 対象を示す変数
+ */
+int readchip(char *NVMorEEPROM)
 {
   uint8_t control_code = slave_address << 3;
 
@@ -115,88 +121,228 @@ int readChip(char *NVMorEEPROM)
   else if (strcmp(NVMorEEPROM, "EEPROM"))
   {
     control_code |= EEPROM_CONFIG;
+  }else{
+    perror("kokoni kuru hazu nai\n");
+    return EXIT_FAILURE;
   }
 
-  for (int i = 0; i < 16; i++)
+  for (i = 0; i < 16; i++)
   {
-    for (int j = 0; j < 16; j++)
+    for (j = 0; j < 16; j++)
     {
       i2c_read(control_code, ((i << 4) + j), data_array[i] + j, 1);
+       //i:上位4bit j:下位4bit data_array[i]+j:データを格納する配列のポインタ 
       fprintf(stderr, "%x :", ((i << 4) + j));
-      snprintf(NULL, 0, "%x", data_array[i][j]);
+      snprintf(NULL, 0, "%x \n", data_array[i][j]);
     }
   }
   return 0;
 }
 
-int eraseChip(char *NVMorEEPROM)
+/*! NVM領域かEEPROM領域いずれかの内容を消去する
+ * @param[in] NVMorEEPROM 対象を示す変数
+ */
+void erasechip(char *NVMorEEPROM)
 {
   uint8_t control_code = slave_address << 3;
   uint8_t addressForAckPolling = control_code;
+  size_t length = 1;
 
   for (i = 0; i < 16; i++)
   {
     fprintf(stderr, "erasing page:%x", i);
 
-    if (NVMorEEPROM == "NVM")
+    if (strcmp(NVMorEEPROM,"NVM") )
     {
       fprintf(stderr, "NVM");
-      i2c_write(control_code, 0xE3, 0x80 | i, 1);
+      control_code = 0x00;
+      control_code |= NVM_CONFIG; // adress上位3bitがそれぞれNVM、eeprom、registerに紐づいているため( slave adressはcontorol_code[4bit] + adress上位3bit の8bit)
+      i2c_write(control_code, 0xE3, 0x80 | i, &length);
     }
-    else if (NVMorEEPROM == "EEPROM")
+    else if (strcmp(NVMorEEPROM,"EEPROM"))
     {
       fprintf(stderr, "EEPROM");
-      i2c_write(control_code, 0xE3, 0x90 | i, 1);
+      i2c_write(control_code, 0xE3, 0x90 | i, &length);
     }
+    usleep(40000); //消去時間がmax 20msらしいが念のため20ms待つことにする
+  }
+  
+  slave_address = 0x00 // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから
+  
+}
 
-    /* To accommodate for the non-I2C compliant ACK behavior of the Page Erase Byte, we've removed the software check for an I2C ACK
-     *  and added the "Wire.endTransmission();" line to generate a stop condition.
-     *  - Please reference "Issue 2: Non-I2C Compliant ACK Behavior for the NVM and EEPROM Page Erase Byte"
-     *    in the SLG46824/6 (XC revision) errata document for more information. */
 
-    //    if (Wire.endTransmission() == 0) {
-    //      Serial.print(F("ack "));
-    //    }
-    //    else {
-    //      Serial.print(F("nack "));
-    //      return -1;
-    //    }
+/*! NVM領域かEEPROM領域いずれかにcsvファイルに基づいた内容を書き込む
+ * @param[in] NVMorEEPROM 対象を示す変数
+ * @param[in] csv_path 書き込むcsvファイルのパス
+ */
+int writechip(char* NVMorEEPROM, char* csv_path)
+{
+  uint8_t control_code;
+  size_t array_size;
+  uint8_t* data = read_csv(csv_path, &array_size);
 
-    Wire.endTransmission();
-
-    if (ackPolling(addressForAckPolling) == -1)
-    {
-      return -1;
-    }
-    else
-    {
-      Serial.print(F("ready "));
-      delay(100);
-    }
-    Serial.println();
+  
+  if (strcmp(NVMorEEPROM, "NVM"))
+  {
+    erasechip(NVMorEEPROM);
+    control_code = slave_address << 3;
+    control_code |= NVM_CONFIG;
+  }
+  else if (strcmp(NVMorEEPROM, "EEPROM"))
+  {
+    erasechip(NVMorEEPROM);
+    control_code = slave_address << 3;
+    control_code |= EEPROM_CONFIG;
+  }else{
+    perror("kokoni kuru hazu nai\n");
+    return EXIT_FAILURE;
   }
 
-  powercycle();
+  array_size = 16;
+
+  for (i = 0; i < 16; i++)
+  {
+    for (j = 0; j < 16; j++)
+    {
+      i2c_write(control_code, ((i << 4) + j), data_array[i] + j, &array_size);
+       //i:上位4bit j:下位4bit data_array[i]+j:データを格納する配列のポインタ 
+    }
+  }
+  soft_reset();
   return 0;
+
+
 }
 
-int writeChip(char *NVMorEEPROM)
-{
+
+
+/*! CSVファイルからuint8_tの配列を読み取る関数
+ * @param[in] filename 読み込むcsvファイル名
+ * @param[in,out] array_size データの入った配列のサイズが入る 
+ */
+// CSVファイルからuint8_tの配列を読み取る関数
+uint8_t* read_csv(const char* filename, size_t* array_size) {
+    FILE* file = fopen(filename, "r");
+    
+    if (!file) {
+        perror("An error occurred while opening the file.");
+        return 1;
+    }
+
+    char line[MAX_LINE_LENGTH];
+    uint8_t* data_array = NULL;
+    size_t current_index = 0;
+    char *end = NULL;
+    
+    while (fgets(line, sizeof(line), file) != NULL) {
+        // 改行文字を削除
+        size_t line_length = strlen(line);
+        if (line_length > 0 && line[line_length - 1] == '\n') {
+            line[line_length - 1] = '\0';
+        }
+        
+        // 16進数文字列からuint8_tに変換して配列に格納
+        uint8_t num = (uint8_t)strtol(line, end, 16);
+        if (*end != NULL)
+        {
+            printf("Error! Contains invalid characters!");
+            return -1;
+        }
+        data_array = realloc(data_array, (current_index + 1) * sizeof(uint8_t));
+        if (!data_array) {
+            perror("Memory allocation error.");
+            fclose(file);
+            return NULL;
+        }
+        data_array[current_index] = num;
+        current_index++;
+    }
+
+    fclose(file);
+    *array_size = current_index;
+    return data_array;
 }
 
-void main(int argc, char *argv[])
-{
-  FILE *fp;
-  if (argc != 2)
-  {
-    fprintf(stderr, "Usage: %s <filename>\n", argv[0]);
-    return EXIT_FAILURE;
+uint8_t soft_reset(){
+  //レジスタ C8 [1601] (I2C リセット ビット)を「1」に設定する
+  uint8_t tmp;
+  size_t length = 1;
+  uint8_t control_code = slave_address << 3;
+  control_code |= NVM_CONFIG;
+  if(i2c_read(control_code, 0xC8, &tmp,1)){
+    printf("i2c communication failed. \n")
+    return 1;
   }
+  if(i2c_write(control_code, 0xC8, tmp | 0x01, &length)){
+    printf("Failed to write to [1601]bit \n")
+    return 1;
+  }
+  usleep(500000);
 
-  fp = fopen(argv[1], "r");
-  if (fp == NULL)
-  {
-    fprintf(stderr, "Error: cannot open file '%s'\n", argv[1]);
-    return EXIT_FAILURE;
-  }
+}
+
+
+
+
+
+/*! main関数の引数
+ * @param[in] argv[1] 書き込むcsvファイルのパス
+ * @param[in] argv[2] NVM or EEPROM 
+ * @param[in] argv[3] r or w or e 読み込み 書き込み 消去
+ */
+int main(int argc, char *argv[]) {
+    uint8_t tmp;
+    if (argc < 4) {
+        printf("Insufficient arguments.\n");
+        return EXIT_FAILURE;
+    }
+
+    // Branch based on the first argument
+    if (strcmp(argv[2], "NVM") == 0) {
+        printf("Option 1, NVM selected. /n");
+        // Processing for the case when the first argument is "option1"
+        if (strcmp(argv[3], "-r") == 0) {
+            printf("Option 1, Sub-option -r selected.\n");
+            readchip('NVM');
+
+        } else if (strcmp(argv[3], "-w") == 0) {
+            printf("Option 1, Sub-option -w selected.\n");
+            writechip('NVM', argv[1]);
+
+        } else if (strcmp(argv[3], "e") == 0) {
+            printf("Option 1, Sub-option -e selected.\n");
+            erasechip('NVM');
+
+        } else {
+            printf("Invalid third argument.\n");
+            return EXIT_FAILURE;
+        }
+    } else if (strcmp(argv[2], "EEPROM") == 0) {
+        printf("Option 1, EEPROM selected. /n");
+        // Processing for the case when the first argument is "option2"
+        if (strcmp(argv[3], "-r") == 0) {
+            printf("Option 2, Sub-option X selected.\n");
+        } else if (strcmp(argv[3], "-w") == 0) {
+            printf("Option 2, Sub-option Y selected.\n");
+        } else if (strcmp(argv[3], "-e") == 0) {
+            printf("Option 2, Sub-option Z selected.\n");
+        } else {
+            printf("Invalid third argument.\n");
+            return EXIT_FAILURE;
+        }
+    } else if (strcmp(argv[1], "reset") == 0){
+      printf("green pak resetting...");
+      if(soft_reset()){
+        printf("Failed to reset. \n");
+      }
+      printf("success!!\n");
+
+    } else {
+        printf("Invalid secound argument.\n");
+        printf(" [csv file name] ['NVM' or 'EEPROM' ] ['-r' or '-w' or '-e']\n");
+        return;
+    }
+
+    return 0;
 }
