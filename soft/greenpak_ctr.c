@@ -4,12 +4,15 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
-
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 #include <linux/i2c.h>
+#include <errno.h>
+#include <time.h>
+
+
 
 #define NVM_CONFIG 0x02
 #define EEPROM_CONFIG 0x03
@@ -22,6 +25,73 @@ uint8_t data_array[16][16] = {};
 static const char *dev_name = "/dev/i2c-3";
 char *comp_str = {"NVM", "EEPROM"};
 size_t i, j;
+
+#define DEFAULT_I2C_BUS      "/dev/i2c-0"
+#define DEFAULT_EEPROM_ADDR  0x50         /* the 24C16 sits on i2c address 0x50 */
+#define DEFAULT_NUM_PAGES    8            /* we default to a 24C16 eeprom which has 8 pages */
+#define BYTES_PER_PAGE       256          /* one eeprom page is 256 byte */
+#define MAX_BYTES            8            /* max number of bytes to write in one chunk */
+       /* ... note: 24C02 and 24C01 only allow 8 bytes to be written in one chunk.   *
+        *  if you are going to write 24C04,8,16 you can change this to 16            */
+
+
+/* write len bytes (stored in buf) to eeprom at address addr, page-offset offset 
+* if len=0 (buf may be NULL in this case) you can reposition the eeprom's read-pointer 
+* return 0 on success, -1 on failure 
+* @param[in] addr EEPROMデバイスのI2Cアドレス.
+* @param[in] offset EEPROMページ内のオフセット.
+* @param[out] *buf 書き込むデータを格納するバッファのポインタ.
+* @param[in] len 書き込むデータの長さ.
+*/
+int eeprom_write(int fd,
+		 unsigned int addr,
+		 unsigned int offset,
+		 unsigned char *buf,
+		 unsigned char len
+){
+	struct i2c_rdwr_ioctl_data msg_rdwr;
+	struct i2c_msg             i2cmsg;
+	int i;
+	char _buf[MAX_BYTES + 1];
+
+	if(len>MAX_BYTES){
+	    fprintf(stderr,"I can only write MAX_BYTES bytes at a time!\n");
+	    return -1;
+	}
+
+	if(len+offset >256){
+	    fprintf(stderr,"Sorry, len(%d)+offset(%d) > 256 (page boundary)\n",
+			len,offset);
+	    return -1;
+	}
+
+	_buf[0]=offset;    /* _buf[0] is the offset into the eeprom page! */
+	for(i=0;i<len;i++) /* copy buf[0..n] -> _buf[1..n+1] */
+	    _buf[1+i]=buf[i];
+
+	msg_rdwr.msgs = &i2cmsg;
+	msg_rdwr.nmsgs = 1;
+
+	i2cmsg.addr  = addr;
+	i2cmsg.flags = 0;
+	i2cmsg.len   = 1+len;
+	i2cmsg.buf   = _buf;
+
+	if((i=ioctl(fd,I2C_RDWR,&msg_rdwr))<0){
+	    perror("ioctl()");
+	    fprintf(stderr,"ioctl returned %d\n",i);
+	    return -1;
+	}
+
+	if(len>0)
+	    fprintf(stderr,"Wrote %d bytes to eeprom at 0x%02x, offset %08x\n",
+		    len,addr,offset);
+	else
+	    fprintf(stderr,"Positioned pointer in eeprom at 0x%02x to offset %08x\n",
+		    addr,offset);
+
+	return 0;
+}
 
 /*! I2Cスレーブデバイスからデータを読み込む.
  * @param[in] dev_addr デバイスアドレス.
