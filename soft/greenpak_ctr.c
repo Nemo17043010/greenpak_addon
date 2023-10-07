@@ -13,7 +13,7 @@
 #include <time.h>
 
 
-
+#define REG_CONFIG 0x00
 #define NVM_CONFIG 0x02
 #define EEPROM_CONFIG 0x03
 
@@ -277,12 +277,17 @@ void erasechip(char *NVMorEEPROM)
 
   for (i = 0; i < 16; i++)
   {
+    
     fprintf(stderr, "erasing page:%x", i);
 
     if (strcmp(NVMorEEPROM,"NVM") == 0)
     {
-      fprintf(stderr, "NVM \n");
       tmp = 0x80 | i;
+      if (tmp == 0xca)
+      {
+        continue;
+      }
+      fprintf(stderr, "NVM \n");
       i2c_write_for_erase(control_code, 0xE3, &tmp, length);
     }
     else if (strcmp(NVMorEEPROM,"EEPROM") == 0)
@@ -294,7 +299,7 @@ void erasechip(char *NVMorEEPROM)
     usleep(40000); //消去時間がmax 20msらしいが念のため20ms待つことにする
   }
 
-  slave_address = 0x00; // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから
+  //slave_address = 0x00; // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから-> contnueで飛ばしてみる
 
 }
 
@@ -410,60 +415,61 @@ uint8_t** convert_to_2d_array(const uint8_t* input)
 
 
 /*! main関数の引数
- * @param[in] argv[1] 書き込むcsvファイルのパス
- * @param[in] argv[2] NVM or EEPROM 
- * @param[in] argv[3] r or w or e 読み込み 書き込み 消去
- */
+* @param[in] argv[1] NVM or EEPROM 
+* @param[in] argv[2] r or w or e 読み込み 書き込み 消去
+* @param[in] argv[3] 書き込むcsvファイルのパス
+*/
 int main(int argc, char *argv[]) {
     uint8_t tmp;
     if (argc < 4) {
         printf("Insufficient arguments.\n");
+        printf(" ['NVM' or 'EEPROM] ['-r' or '-w' or '-e'] [csv file name]\n");
         return EXIT_FAILURE;
     }
 
     // Branch based on the first argument
-    if (strcmp(argv[2], "NVM") == 0) {
+    if (strcmp(argv[1], "NVM") == 0) {
         printf("Option 1, NVM selected. \n");
         // Processing for the case when the first argument is "option1"
-        if (strcmp(argv[3], "-r") == 0) {
+        if (strcmp(argv[2], "-r") == 0) {
             printf(" Sub-option -r selected.\n");
-            readchip(argv[2]);
+            readchip(argv[1]);
 
-        } else if (strcmp(argv[3], "-w") == 0) {
+        } else if (strcmp(argv[2], "-w") == 0) {
             printf("Option 1, Sub-option -w selected.\n");
-            writechip(argv[2], argv[1]);
+            writechip(argv[1], argv[3]);
 
-        } else if (strcmp(argv[3], "-e") == 0) {
+        } else if (strcmp(argv[2], "-e") == 0) {
             printf("Option 1, Sub-option -e selected.\n");
-            erasechip(argv[2]);
+            erasechip(argv[1]);
 
         } else {
             printf("Invalid third argument.\n");
+            printf(" ['NVM' or 'EEPROM] ['-r' or '-w' or '-e'] [csv file name]\n");
             return EXIT_FAILURE;
         }
-    } else if (strcmp(argv[2], "EEPROM") == 0) {
+    } else if (strcmp(argv[1], "EEPROM") == 0) {
         printf("Option 1, EEPROM selected. /n");
         // Processing for the case when the first argument is "option2"
-        if (strcmp(argv[3], "-r") == 0) {
-            printf("Option 2, Sub-option X selected.\n");
-        } else if (strcmp(argv[3], "-w") == 0) {
-            printf("Option 2, Sub-option Y selected.\n");
-        } else if (strcmp(argv[3], "-e") == 0) {
-            printf("Option 2, Sub-option Z selected.\n");
+        if (strcmp(argv[2], "-r") == 0) {
+            printf(" Sub-option -r selected.\n");
+            readchip(argv[1]);
+        } else if (strcmp(argv[2], "-w") == 0) {
+            printf("Option 1, Sub-option -w selected.\n");
+            writechip(argv[1], argv[3]);
+
+        } else if (strcmp(argv[2], "-e") == 0) {
+            printf("Option 1, Sub-option -e selected.\n");
+            erasechip(argv[1]);
+
         } else {
             printf("Invalid third argument.\n");
+            printf(" ['NVM' or 'EEPROM] ['-r' or '-w' or '-e'] [csv file name]\n");
             return EXIT_FAILURE;
         }
-    } else if (strcmp(argv[1], "reset") == 0){
-      printf("green pak resetting...");
-      if(soft_reset()){
-        printf("Failed to reset. \n");
-      }
-      printf("success!!\n");
-
     } else {
         printf("Invalid secound argument.\n");
-        printf(" [csv file name] ['NVM' or 'EEPROM' ] ['-r' or '-w' or '-e']\n");
+        printf(" ['NVM' or 'EEPROM] ['-r' or '-w' or '-e'] [csv file name]\n");
         return -1;
     }
 
