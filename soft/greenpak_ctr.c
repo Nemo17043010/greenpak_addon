@@ -287,7 +287,7 @@ void erasechip(char *NVMorEEPROM)
       {
         continue;
       }
-      fprintf(stderr, "NVM \n");
+   
       i2c_write_for_erase(control_code, 0xE3, &tmp, length);
     }
     else if (strcmp(NVMorEEPROM,"EEPROM") == 0)
@@ -347,7 +347,7 @@ uint8_t* read_csv(const char* filename, uint16_t* array_size) {
         if (line_length > 0 && line[line_length - 1] == '\n') {
             line[line_length - 1] = '\0';
         }
-        printf("%s\n",line);
+      
         // 16進数文字列からuint8_tに変換して配列に格納
         uint8_t num = (uint8_t)strtol(line, &end, 16);   //
         if (*end != '\0')
