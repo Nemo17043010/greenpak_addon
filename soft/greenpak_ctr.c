@@ -313,7 +313,7 @@ uint8_t soft_reset(){
     printf("i2c communication failed. \n");
     return 1;
   }
-  tmp = tmp | 0x01;
+  tmp = tmp | 0x02;
   if(i2c_write(control_code, 0xC8, &tmp , length)){
     printf("Failed to write to [1601]bit \n");
     return 1;
