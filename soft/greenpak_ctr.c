@@ -220,7 +220,7 @@ int writechip(char* NVMorEEPROM, char* csv_path)
   
   if (strcmp(NVMorEEPROM, "NVM") == 0)
   {
-    //erasechip(NVMorEEPROM);
+    erasechip(NVMorEEPROM);
     control_code = slave_address << 3;
     control_code |= NVM_CONFIG;
   }
