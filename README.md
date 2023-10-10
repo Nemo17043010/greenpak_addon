@@ -14,8 +14,20 @@ Armadilloでgreenpakを動かす
 
 ## カウンタ回路をリセットする 
 i2cset -y 3 0x08 0x7a 0x00 b //CNT1のresetをアサート
+
 i2cset -y 3 0x08 0x7a 0x80 b //CNT1のresetをデアサート
 
+## カウンタの確認方法
+
+以下のレジスタが1パルス入力される毎に1ずつ減っていく。
+
 7C 999:992 CNT0(16-bit) Counted Value Q[7:0]　->上位16bitのカウンタ
+
 7D 1007:1000 CNT0(16-bit) Counted Value Q[15:8] ->上位16bitのカウンタ
+
 7E 1015:1008 CNT2(8-bit) Counted Value Q[7:0] ->下位8bitのカウンタ
+
+* 7Eレジスタが00のとき(reset直後)
+* 7C,7Dレジスタが00で7Eレジスタが00のとき(上位16bitに桁上がりするとき)
+  
+の時には7E,または7C,7Dレジスタをffにする処理で1パルス使用する
