@@ -24,9 +24,9 @@ int8_t i2c_write(
     uint8_t dev_addr, uint8_t reg_addr, const uint8_t *data, uint16_t length);
 int8_t i2c_write_for_erase(
     uint8_t dev_addr, uint8_t reg_addr, const uint8_t* data, uint16_t length);
-int readchip(char *NVMorEEPROM);
-void erasechip(char *NVMorEEPROM);
-int writechip(char* NVMorEEPROM, char* csv_path);
+int8_t readchip(char *NVMorEEPROM);
+int8_t erasechip(char *NVMorEEPROM);
+int8_t writechip(char* NVMorEEPROM, char* csv_path);
 uint8_t* read_csv(const char* filename, uint16_t* array_size);
 uint8_t** convert_to_2d_array(const uint8_t* input);
 uint8_t soft_reset();
@@ -170,7 +170,7 @@ int8_t i2c_write(
 /*! NVM領域かEEPROM領域いずれかの内容をdumpする
  * @param[in] NVMorEEPROM 対象を示す変数
  */
-int readchip(char *NVMorEEPROM)
+int8_t readchip(char *NVMorEEPROM)
 {
   uint8_t control_code = slave_address << 3;
   uint8_t data_array[16][16] = {};
@@ -184,14 +184,20 @@ int readchip(char *NVMorEEPROM)
     control_code |= EEPROM_CONFIG;
   }else{
     perror("kokoni kuru hazu nai\n");
-    return EXIT_FAILURE;
+    return -1;
   }
 
   for (i = 0; i < 16; i++)
   {
     for (j = 0; j < 16; j++)
     {
-      i2c_read(control_code, ((i << 4) + j), data_array[i] + j, 1);
+
+      if (i2c_read(control_code, ((i << 4) + j), data_array[i] + j, 1)!=0)
+      {
+        printf("i2c_read error \n");
+        return -1;
+      }
+
        //i:上位4bit j:下位4bit data_array[i]+j:データを格納する配列のポインタ 
       fprintf(stderr, "%x :", ((i << 4) + j));
       fprintf(stderr, "%x \n", data_array[i][j]);
@@ -205,7 +211,7 @@ int readchip(char *NVMorEEPROM)
  * @param[in] NVMorEEPROM 対象を示す変数
  * @param[in] csv_path 書き込むcsvファイルのパス
  */
-int writechip(char* NVMorEEPROM, char* csv_path)
+int8_t writechip(char* NVMorEEPROM, char* csv_path)
 {
   uint8_t control_code;
   uint16_t array_size;
@@ -220,13 +226,22 @@ int writechip(char* NVMorEEPROM, char* csv_path)
   
   if (strcmp(NVMorEEPROM, "NVM") == 0)
   {
-    erasechip(NVMorEEPROM);
+
+    if (erasechip(NVMorEEPROM)!=0)
+    {
+      return -1;
+    }
+
     control_code = slave_address << 3;
     control_code |= NVM_CONFIG;
   }
   else if (strcmp(NVMorEEPROM, "EEPROM") == 0)
   {
-    erasechip(NVMorEEPROM);
+    if (erasechip(NVMorEEPROM)!=0)
+    {
+      return -1;
+    }
+
     control_code = slave_address << 3;
     control_code |= EEPROM_CONFIG;
   }else{
@@ -245,7 +260,13 @@ int writechip(char* NVMorEEPROM, char* csv_path)
     }
     printf("-------------\n");
     printf("i2c_write \n");
-    i2c_write(control_code, (i << 4), data_array[i], array_size);
+
+    if (i2c_write(control_code, (i << 4), data_array[i], array_size)!=0)
+    {
+      printf("i2c_write error \n");
+      return -1;
+    }
+
     //i:上位4bit j:下位4bit data_array[i]+j:データを格納する配列のポインタ
     usleep(60000);
     if (i != 15 && j != 15)
@@ -258,7 +279,13 @@ int writechip(char* NVMorEEPROM, char* csv_path)
 
   }
 
-  soft_reset();
+  ;
+  if (soft_reset()!=0)
+  {
+    printf("reset error \n");
+    return -1;
+  }
+
   return 0;
 
 
@@ -268,7 +295,7 @@ int writechip(char* NVMorEEPROM, char* csv_path)
 /*! NVM領域かEEPROM領域いずれかの内容を消去する
  * @param[in] NVMorEEPROM 対象を示す変数
  */
-void erasechip(char *NVMorEEPROM)
+int8_t erasechip(char *NVMorEEPROM)
 {
   uint8_t control_code = slave_address << 3; //3bit左シフトさせつつA10,A9,A8を0にして"ERSR register"のBlock Adressに設定している
   uint8_t addressForAckPolling = control_code;
@@ -288,15 +315,28 @@ void erasechip(char *NVMorEEPROM)
         continue;
       }
    
-      i2c_write_for_erase(control_code, 0xE3, &tmp, length);
+
+      if (i2c_write_for_erase(control_code, 0xE3, &tmp, length)!=0)
+      {
+        printf("NVM erase error \n");
+        return -1;
+      }
+
     }
     else if (strcmp(NVMorEEPROM,"EEPROM") == 0)
     {
       fprintf(stderr, "EEPROM");
       tmp = 0x90 | i;
-      i2c_write_for_erase(control_code, 0xE3, &tmp , length);
+
+      if (i2c_write_for_erase(control_code, 0xE3, &tmp , length)!=0)
+      {
+        printf("EEPROM erase error \n");
+        return -1;
+      }
+
     }
     usleep(40000); //消去時間がmax 20msらしいが念のため20ms待つことにする
+    return 0;
   }
 
   //slave_address = 0x00; // 上の消去処理でslaveアドレスを決めているレジスタ"0xCA"も消してしまっているから-> contnueで飛ばしてみる
@@ -319,6 +359,7 @@ uint8_t soft_reset(){
     return 1;
   }
   usleep(500000);
+  return 0;
 
 }
 
@@ -388,7 +429,7 @@ uint8_t** convert_to_2d_array(const uint8_t* input)
         output[i] = (uint8_t*)malloc(OUTPUT_COLS * sizeof(uint8_t));
         if (!output[i]) {
             perror("Memory allocation error");
-            for (int j = 0; j < i; j++) {
+            for (j = 0; j < i; j++) {
                 free(output[j]);
             }
             free(output);
@@ -419,7 +460,7 @@ uint8_t** convert_to_2d_array(const uint8_t* input)
 * @param[in] argv[2] r or w or e 読み込み 書き込み 消去
 * @param[in] argv[3] 書き込むcsvファイルのパス
 */
-int main(int argc, char *argv[]) {
+int8_t main(int argc, char *argv[]) {
     uint8_t tmp;
     if (argc < 4) {
         printf("Insufficient arguments.\n");
@@ -433,15 +474,32 @@ int main(int argc, char *argv[]) {
         // Processing for the case when the first argument is "option1"
         if (strcmp(argv[2], "-r") == 0) {
             printf(" Sub-option -r selected.\n");
-            readchip(argv[1]);
+            if (readchip(argv[1]!=0))
+            {
+              printf("readchip error!\n");
+              return -1;
+            }
+
 
         } else if (strcmp(argv[2], "-w") == 0) {
             printf("Option 1, Sub-option -w selected.\n");
-            writechip(argv[1], argv[3]);
+
+            if (writechip(argv[1], argv[3])!=0)
+            {
+              printf("writechip error!\n");
+              return -1;
+            }
+
 
         } else if (strcmp(argv[2], "-e") == 0) {
             printf("Option 1, Sub-option -e selected.\n");
-            erasechip(argv[1]);
+
+            if (erasechip(argv[1])!=0)
+            {
+              printf("erasechip error!\n");
+              return -1;
+            }
+
 
         } else {
             printf("Invalid third argument.\n");
@@ -453,19 +511,37 @@ int main(int argc, char *argv[]) {
         // Processing for the case when the first argument is "option2"
         if (strcmp(argv[2], "-r") == 0) {
             printf(" Sub-option -r selected.\n");
-            readchip(argv[1]);
+
+            if (readchip(argv[1])!=0)
+            {
+              printf("readchip error!\n");
+              return -1;
+            }
+
         } else if (strcmp(argv[2], "-w") == 0) {
             printf("Option 1, Sub-option -w selected.\n");
-            writechip(argv[1], argv[3]);
+
+            if (writechip(argv[1], argv[3])!=0)
+            {
+              printf("writechip error!\n");
+              return -1;
+            }
+
 
         } else if (strcmp(argv[2], "-e") == 0) {
             printf("Option 1, Sub-option -e selected.\n");
-            erasechip(argv[1]);
+
+            if (erasechip(argv[1])!=0)
+            {
+              printf("erasechip error!\n");
+              return -1;
+            }
+
 
         } else {
             printf("Invalid third argument.\n");
             printf(" ['NVM' or 'EEPROM] ['-r' or '-w' or '-e'] [csv file name]\n");
-            return EXIT_FAILURE;
+            return -1;
         }
     } else {
         printf("Invalid secound argument.\n");
