@@ -192,7 +192,7 @@ int8_t readchip(char *NVMorEEPROM)
     for (j = 0; j < 16; j++)
     {
 
-      if (i2c_read(control_code, ((i << 4) + j), data_array[i] + j, 1)!=0)
+      if (i2c_read(control_code, ((i << 4) + j), data_array[i] + j, 1))
       {
         printf("i2c_read error \n");
         return -1;
@@ -227,7 +227,7 @@ int8_t writechip(char* NVMorEEPROM, char* csv_path)
   if (strcmp(NVMorEEPROM, "NVM") == 0)
   {
 
-    if (erasechip(NVMorEEPROM)!=0)
+    if (erasechip(NVMorEEPROM))
     {
       return -1;
     }
@@ -237,7 +237,7 @@ int8_t writechip(char* NVMorEEPROM, char* csv_path)
   }
   else if (strcmp(NVMorEEPROM, "EEPROM") == 0)
   {
-    if (erasechip(NVMorEEPROM)!=0)
+    if (erasechip(NVMorEEPROM))
     {
       return -1;
     }
@@ -261,7 +261,7 @@ int8_t writechip(char* NVMorEEPROM, char* csv_path)
     printf("-------------\n");
     printf("i2c_write \n");
 
-    if (i2c_write(control_code, (i << 4), data_array[i], array_size)!=0)
+    if (i2c_write(control_code, (i << 4), data_array[i], array_size))
     {
       printf("i2c_write error \n");
       return -1;
@@ -280,7 +280,7 @@ int8_t writechip(char* NVMorEEPROM, char* csv_path)
   }
 
   ;
-  if (soft_reset()!=0)
+  if (soft_reset())
   {
     printf("reset error \n");
     return -1;
@@ -316,7 +316,7 @@ int8_t erasechip(char *NVMorEEPROM)
       }
    
 
-      if (i2c_write_for_erase(control_code, 0xE3, &tmp, length)!=0)
+      if (i2c_write_for_erase(control_code, 0xE3, &tmp, length))
       {
         printf("NVM erase error \n");
         return -1;
@@ -328,7 +328,7 @@ int8_t erasechip(char *NVMorEEPROM)
       fprintf(stderr, "EEPROM");
       tmp = 0x90 | i;
 
-      if (i2c_write_for_erase(control_code, 0xE3, &tmp , length)!=0)
+      if (i2c_write_for_erase(control_code, 0xE3, &tmp , length))
       {
         printf("EEPROM erase error \n");
         return -1;
@@ -474,7 +474,7 @@ int8_t main(int argc, char *argv[]) {
         // Processing for the case when the first argument is "option1"
         if (strcmp(argv[2], "-r") == 0) {
             printf(" Sub-option -r selected.\n");
-            if (readchip(argv[1]!=0))
+            if (readchip(argv[1]))
             {
               printf("readchip error!\n");
               return -1;
@@ -484,7 +484,7 @@ int8_t main(int argc, char *argv[]) {
         } else if (strcmp(argv[2], "-w") == 0) {
             printf("Option 1, Sub-option -w selected.\n");
 
-            if (writechip(argv[1], argv[3])!=0)
+            if (writechip(argv[1], argv[3]))
             {
               printf("writechip error!\n");
               return -1;
@@ -494,7 +494,7 @@ int8_t main(int argc, char *argv[]) {
         } else if (strcmp(argv[2], "-e") == 0) {
             printf("Option 1, Sub-option -e selected.\n");
 
-            if (erasechip(argv[1])!=0)
+            if (erasechip(argv[1]))
             {
               printf("erasechip error!\n");
               return -1;
@@ -512,7 +512,7 @@ int8_t main(int argc, char *argv[]) {
         if (strcmp(argv[2], "-r") == 0) {
             printf(" Sub-option -r selected.\n");
 
-            if (readchip(argv[1])!=0)
+            if (readchip(argv[1]))
             {
               printf("readchip error!\n");
               return -1;
@@ -521,7 +521,7 @@ int8_t main(int argc, char *argv[]) {
         } else if (strcmp(argv[2], "-w") == 0) {
             printf("Option 1, Sub-option -w selected.\n");
 
-            if (writechip(argv[1], argv[3])!=0)
+            if (writechip(argv[1], argv[3]))
             {
               printf("writechip error!\n");
               return -1;
@@ -531,7 +531,7 @@ int8_t main(int argc, char *argv[]) {
         } else if (strcmp(argv[2], "-e") == 0) {
             printf("Option 1, Sub-option -e selected.\n");
 
-            if (erasechip(argv[1])!=0)
+            if (erasechip(argv[1]))
             {
               printf("erasechip error!\n");
               return -1;
